@@ -5,8 +5,9 @@ sql:
   engine: "mysql"
   gen:
     go:
-      package: "user"
-      out: "user"
-      emit_empty_slices: true
-      emit_json_tags: true
-      json_tags_case_style: "snake"
+        package: "user"
+        out: "user"
+        emit_empty_slices: true
+        emit_json_tags: true
+        emit_prepared_queries: true
+        json_tags_case_style: "snake"

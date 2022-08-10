@@ -24,7 +24,7 @@ type CreateUserParams struct {
 }
 
 func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (sql.Result, error) {
-	return q.db.ExecContext(ctx, createUser, arg.Email, arg.Username)
+	return q.exec(ctx, q.createUserStmt, createUser, arg.Email, arg.Username)
 }
 
 const deleteUser = `-- name: DeleteUser :exec
@@ -33,7 +33,7 @@ WHERE id = ?
 `
 
 func (q *Queries) DeleteUser(ctx context.Context, id int64) error {
-	_, err := q.db.ExecContext(ctx, deleteUser, id)
+	_, err := q.exec(ctx, q.deleteUserStmt, deleteUser, id)
 	return err
 }
 
@@ -43,7 +43,7 @@ WHERE id = ? LIMIT 1
 `
 
 func (q *Queries) GetUser(ctx context.Context, id int64) (User, error) {
-	row := q.db.QueryRowContext(ctx, getUser, id)
+	row := q.queryRow(ctx, q.getUserStmt, getUser, id)
 	var i User
 	err := row.Scan(&i.ID, &i.Email, &i.Username)
 	return i, err
@@ -55,7 +55,7 @@ ORDER BY username
 `
 
 func (q *Queries) ListUsers(ctx context.Context) ([]User, error) {
-	rows, err := q.db.QueryContext(ctx, listUsers)
+	rows, err := q.query(ctx, q.listUsersStmt, listUsers)
 	if err != nil {
 		return nil, err
 	}
