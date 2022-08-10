@@ -1,11 +1,10 @@
-package auth
+package goauthn
 
 import (
 	"net/http"
 	"net/mail"
 	"unicode"
 
-	goauthn "github.com/pmoieni/go-authn"
 	"github.com/pmoieni/go-authn/user"
 	"github.com/rs/zerolog"
 )
@@ -22,7 +21,7 @@ type AuthService struct {
 
 func (s *AuthService) validateEmail(e string) error {
 	if _, err := mail.ParseAddress(e); err != nil {
-		return &goauthn.ErrorResponse{Status: http.StatusBadRequest, Message: errInvalidEmail}
+		return &ErrorResponse{Status: http.StatusBadRequest, Message: errInvalidEmail}
 	}
 	return nil
 }
@@ -44,7 +43,7 @@ func (s *AuthService) validatePassword(p string) error {
 	}
 
 	if !hasMinLen || !hasNumber {
-		return &goauthn.ErrorResponse{Status: http.StatusBadRequest, Message: errBadPassword}
+		return &ErrorResponse{Status: http.StatusBadRequest, Message: errBadPassword}
 	}
 
 	return nil
