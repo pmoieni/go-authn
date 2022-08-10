@@ -1,4 +1,4 @@
-package goauthn
+package goa
 
 import (
 	"net/http"

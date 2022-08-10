@@ -1,4 +1,4 @@
-package goauthn
+package goa
 
 type errorResponse struct {
 	Status  int

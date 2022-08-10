@@ -1,1 +1,1 @@
-package goauthn
+package goa
