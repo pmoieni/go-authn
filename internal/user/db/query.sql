@@ -4,13 +4,13 @@ WHERE id = ? LIMIT 1;
 
 -- name: ListUsers :many
 SELECT * FROM users
-ORDER BY username;
+ORDER BY email;
 
 -- name: CreateUser :execresult
 INSERT INTO users (
-  email, username
+  email, first_name, last_name, picture
 ) VALUES (
-  ?, ?
+  ?, ?, ?, ?
 );
 
 -- name: DeleteUser :exec

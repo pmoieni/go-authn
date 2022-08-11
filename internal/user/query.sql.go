@@ -12,19 +12,26 @@ import (
 
 const createUser = `-- name: CreateUser :execresult
 INSERT INTO users (
-  email, username
+  email, first_name, last_name, picture
 ) VALUES (
-  ?, ?
+  ?, ?, ?, ?
 )
 `
 
 type CreateUserParams struct {
-	Email    string `json:"email"`
-	Username string `json:"username"`
+	Email     string         `json:"email"`
+	FirstName sql.NullString `json:"first_name"`
+	LastName  sql.NullString `json:"last_name"`
+	Picture   sql.NullString `json:"picture"`
 }
 
 func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (sql.Result, error) {
-	return q.exec(ctx, q.createUserStmt, createUser, arg.Email, arg.Username)
+	return q.exec(ctx, q.createUserStmt, createUser,
+		arg.Email,
+		arg.FirstName,
+		arg.LastName,
+		arg.Picture,
+	)
 }
 
 const deleteUser = `-- name: DeleteUser :exec
@@ -38,20 +45,26 @@ func (q *Queries) DeleteUser(ctx context.Context, id int64) error {
 }
 
 const getUser = `-- name: GetUser :one
-SELECT id, email, username FROM users
+SELECT id, email, first_name, last_name, picture FROM users
 WHERE id = ? LIMIT 1
 `
 
 func (q *Queries) GetUser(ctx context.Context, id int64) (User, error) {
 	row := q.queryRow(ctx, q.getUserStmt, getUser, id)
 	var i User
-	err := row.Scan(&i.ID, &i.Email, &i.Username)
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.FirstName,
+		&i.LastName,
+		&i.Picture,
+	)
 	return i, err
 }
 
 const listUsers = `-- name: ListUsers :many
-SELECT id, email, username FROM users
-ORDER BY username
+SELECT id, email, first_name, last_name, picture FROM users
+ORDER BY email
 `
 
 func (q *Queries) ListUsers(ctx context.Context) ([]User, error) {
@@ -63,7 +76,13 @@ func (q *Queries) ListUsers(ctx context.Context) ([]User, error) {
 	items := []User{}
 	for rows.Next() {
 		var i User
-		if err := rows.Scan(&i.ID, &i.Email, &i.Username); err != nil {
+		if err := rows.Scan(
+			&i.ID,
+			&i.Email,
+			&i.FirstName,
+			&i.LastName,
+			&i.Picture,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
