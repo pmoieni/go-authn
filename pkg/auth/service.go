@@ -1,50 +1,67 @@
-package goa
+package auth
 
 import (
 	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
+	"time"
 
 	"github.com/coreos/go-oidc/v3/oidc"
+	"github.com/pmoieni/go-authn/internal/auth"
 	"golang.org/x/oauth2"
 )
 
-type Handlers struct {
+type Service struct {
 	AuthHandler     http.HandlerFunc
 	CallbackHandler http.HandlerFunc
 }
 
-// google oauth config
-func (c *Config) NewService(p *Provider) (*Handlers, error) {
-	oidcCfg, err := c.initProvider(p)
+func NewService(
+	baseURL,
+	issuer,
+	issuerURL,
+	clientID,
+	clientSecret string,
+	scopes []string,
+) (*Service, error) {
+	p := auth.NewProvider(
+		baseURL,
+		issuer,
+		issuerURL,
+		clientID,
+		clientSecret,
+		scopes,
+	)
+
+	oidcCfg, err := p.GenOAuthCfg()
 	if err != nil {
-		return &Handlers{}, err
+		return nil, err
 	}
 
 	// make authenticator handler
-	authHandler := func(w http.ResponseWriter, r *http.Request) {
-		state := randString(32)
-		nonce := randString(32)
+	ah := func(w http.ResponseWriter, r *http.Request) {
+		state := auth.RandString(32)
+		nonce := auth.RandString(32)
 
 		sc := &http.Cookie{
-			Path:     c.BaseURL + "/auth" + p.Name,
-			Name:     p.Name + "_state",
+			Path:     p.BaseURL + "/auth" + p.Issuer,
+			Name:     p.Issuer + "_state",
 			Value:    state,
 			Secure:   true,
 			HttpOnly: true,
 			SameSite: http.SameSiteLaxMode,
-			Expires:  p.StateExp,
+			Expires:  time.Now().UTC().Add(p.StateExp),
 		}
 
 		nc := &http.Cookie{
-			Path:     c.BaseURL + "/auth" + p.Name,
-			Name:     p.Name + "_nonce",
+			Path:     p.BaseURL + "/auth" + p.Issuer,
+			Name:     p.Issuer + "_nonce",
 			Value:    nonce,
 			Secure:   true,
 			HttpOnly: true,
 			SameSite: http.SameSiteLaxMode,
-			Expires:  p.NonceExp,
+			Expires:  time.Now().UTC().Add(p.NonceExp),
 		}
 
 		http.SetCookie(w, sc)
@@ -59,8 +76,8 @@ func (c *Config) NewService(p *Provider) (*Handlers, error) {
 	}
 
 	// make callback handler
-	callbackHandler := func(w http.ResponseWriter, r *http.Request) {
-		state, err := r.Cookie(p.Name + "_state")
+	ch := func(w http.ResponseWriter, r *http.Request) {
+		state, err := r.Cookie(p.Issuer + "_state")
 		if err != nil {
 			if errors.Is(err, http.ErrNoCookie) {
 				w.WriteHeader(http.StatusBadRequest)
@@ -86,13 +103,13 @@ func (c *Config) NewService(p *Provider) (*Handlers, error) {
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
-		idToken, err := verifier.Verify(context.Background(), rawIDToken)
+		idToken, err := p.Verifier.Verify(context.Background(), rawIDToken)
 		if err != nil {
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
 
-		nonce, err := r.Cookie(p.Name + "_nonce")
+		nonce, err := r.Cookie(p.Issuer + "_nonce")
 		if err != nil {
 			w.WriteHeader(http.StatusUnauthorized)
 			return
@@ -119,10 +136,5 @@ func (c *Config) NewService(p *Provider) (*Handlers, error) {
 		}
 	}
 
-	h := Handlers{
-		AuthHandler:     authHandler,
-		CallbackHandler: callbackHandler,
-	}
-
-	return &h, nil
+	return &Service{ah, ch}, nil
 }
