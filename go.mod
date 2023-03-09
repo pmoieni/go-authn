@@ -1,11 +1,9 @@
 module github.com/pmoieni/go-authn
 
-go 1.18
+go 1.20
 
 require (
 	github.com/coreos/go-oidc/v3 v3.2.0
-	github.com/go-chi/chi/v5 v5.0.8
-	github.com/hyphengolang/prelude v0.1.3
 	golang.org/x/oauth2 v0.0.0-20220808172628-8227340efae7
 )
 

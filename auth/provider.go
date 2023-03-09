@@ -8,45 +8,54 @@ import (
 	"time"
 
 	"github.com/coreos/go-oidc/v3/oidc"
-	"github.com/pmoieni/go-authn/internal/auth"
 	"golang.org/x/oauth2"
 )
 
-type Service struct {
-	AuthHandler     http.HandlerFunc
-	CallbackHandler http.HandlerFunc
+const (
+	defaultStateExp = 10 * time.Minute
+	defaultNonceExp = 10 * time.Minute
+)
+
+type Issuer string
+
+type Provider struct {
+	Issuer       Issuer
+	IssuerURL    string
+	StateExp     time.Duration
+	NonceExp     time.Duration
+	ClientID     string
+	ClientSecret string
+	Scopes       []string
+	Verifier     *oidc.IDTokenVerifier
 }
 
-func NewService(
-	baseURL,
+func NewProvider(
 	issuer,
 	issuerURL,
 	clientID,
 	clientSecret string,
 	scopes []string,
-) (*Service, error) {
-	p := auth.NewProvider(
-		baseURL,
-		issuer,
+) *Provider {
+	return &Provider{
+		Issuer(issuer),
 		issuerURL,
+		defaultStateExp,
+		defaultNonceExp,
 		clientID,
 		clientSecret,
 		scopes,
-	)
-
-	oidcCfg, err := p.GenOAuthCfg()
-	if err != nil {
-		return nil, err
+		nil,
 	}
+}
 
-	// make authenticator handler
-	ah := func(w http.ResponseWriter, r *http.Request) {
-		state := auth.RandString(32)
-		nonce := auth.RandString(32)
+func (p *Provider) getAuthHandler(baseURL string, oauthCfg *oauth2.Config) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		state := RandString(32)
+		nonce := RandString(32)
 
 		sc := &http.Cookie{
-			Path:     p.BaseURL + "/auth" + p.Issuer,
-			Name:     p.Issuer + "_state",
+			Path:     baseURL + "/auth" + string(p.Issuer),
+			Name:     string(p.Issuer) + "_state",
 			Value:    state,
 			Secure:   true,
 			HttpOnly: true,
@@ -55,8 +64,8 @@ func NewService(
 		}
 
 		nc := &http.Cookie{
-			Path:     p.BaseURL + "/auth" + p.Issuer,
-			Name:     p.Issuer + "_nonce",
+			Path:     baseURL + "/auth" + string(p.Issuer),
+			Name:     string(p.Issuer) + "_nonce",
 			Value:    nonce,
 			Secure:   true,
 			HttpOnly: true,
@@ -70,14 +79,15 @@ func NewService(
 		http.Redirect(
 			w,
 			r,
-			oidcCfg.AuthCodeURL(state, oidc.Nonce(nonce), oauth2.AccessTypeOffline),
+			oauthCfg.AuthCodeURL(state, oidc.Nonce(nonce), oauth2.AccessTypeOffline),
 			http.StatusTemporaryRedirect,
 		)
 	}
+}
 
-	// make callback handler
-	ch := func(w http.ResponseWriter, r *http.Request) {
-		state, err := r.Cookie(p.Issuer + "_state")
+func (p *Provider) getCallbackHandler(baseURL string, oauthCfg *oauth2.Config) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		state, err := r.Cookie(string(p.Issuer) + "_state")
 		if err != nil {
 			if errors.Is(err, http.ErrNoCookie) {
 				w.WriteHeader(http.StatusBadRequest)
@@ -93,7 +103,7 @@ func NewService(
 			return
 		}
 
-		oauth2Token, err := oidcCfg.Exchange(context.Background(), r.URL.Query().Get("code"))
+		oauth2Token, err := oauthCfg.Exchange(context.Background(), r.URL.Query().Get("code"))
 		if err != nil {
 			w.WriteHeader(http.StatusUnauthorized)
 			return
@@ -109,7 +119,7 @@ func NewService(
 			return
 		}
 
-		nonce, err := r.Cookie(p.Issuer + "_nonce")
+		nonce, err := r.Cookie(string(p.Issuer) + "_nonce")
 		if err != nil {
 			w.WriteHeader(http.StatusUnauthorized)
 			return
@@ -135,6 +145,23 @@ func NewService(
 			w.WriteHeader(http.StatusInternalServerError)
 		}
 	}
+}
 
-	return &Service{ah, ch}, nil
+func (p *Provider) genOAuthCfg(baseURL string) (*oauth2.Config, error) {
+	op, err := oidc.NewProvider(context.Background(), p.IssuerURL)
+	if err != nil {
+		return nil, err
+	}
+
+	p.Verifier = op.Verifier(&oidc.Config{
+		ClientID: p.ClientID,
+	})
+
+	return &oauth2.Config{
+		ClientID:     p.ClientID,
+		ClientSecret: p.ClientSecret,
+		Endpoint:     op.Endpoint(),
+		RedirectURL:  baseURL + "/auth/" + string(p.Issuer) + "/callback",
+		Scopes:       append([]string{oidc.ScopeOpenID}, p.Scopes...),
+	}, nil
 }
